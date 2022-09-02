@@ -445,9 +445,8 @@ class DLCLive(object):
             self.pose = pose[:, [1, 0, 2]]
 
         # display image if display=True before correcting pose for cropping/resizing
-
-        if self.display is not None:
-            self.display.display_frame(frame, self.pose)
+        # if self.display is not None:
+        #     self.display.display_frame(frame, self.pose)
 
         # if frame is cropped, convert pose coordinates to original frame coordinates
 
@@ -466,6 +465,10 @@ class DLCLive(object):
 
         if self.processor:
             self.pose = self.processor.process(self.pose, **kwargs)
+
+        # Moved display to after processor.
+        if self.display is not None:
+            self.display.display_frame(frame, self.pose)
 
         return self.pose
 
