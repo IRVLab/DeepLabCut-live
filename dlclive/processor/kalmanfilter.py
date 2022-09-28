@@ -10,7 +10,6 @@ import time
 import numpy as np
 from dlclive.processor import Processor
 
-
 class KalmanFilterPredictor(Processor):
     def __init__(
         self,
