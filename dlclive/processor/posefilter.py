@@ -9,6 +9,9 @@ import math
 import numpy as np
 from dlclive.processor import Processor
 
+from filterpy.kalman import KalmanFilter
+from filterpy.common import Q_discrete_white_noise
+
 """
 OneEuroFilter from https://github.com/jaantollander/OneEuroFilter
 """
@@ -120,9 +123,24 @@ class MovingAverageFilter:
         return conf_term and x_term and y_term
 
 
-class KalmanFilter(object):
-    def __init__(self):
-        pass
+class PoseKalmanFilter(object):
+    def __init__(self, time, pose):
+        self.kf = KalmanFilter(dim_x=2, dim_z=2)
+        self.kf.x = np.array([pose[0], pose[1]])
+        self.kf.F = np.array([[1., 1.],[0., 1.]])
+        self.kf.H = np.array([[1., 0.], [0., 1.]])
+        self.kf.P *= 1000.
+        conf = 1000. * pose[2]
+        self.kf.R = np.array([[conf, 0.], [0., conf]])
+        self.kf.Q = Q_discrete_white_noise(dim=2, dt=0.1, var=0.13)
+
+    def __call__(self, time, pose):
+        conf = 1000. * pose[2]
+        self.kf._R = np.array([[conf, 0.], [0., conf]])
+        self.kf.predict()
+        self.kf.update(pose[0:2])
+
+        return list(self.kf.x).extend([self.kf.likelihood])
 
 class PoseFilter(Processor):
     def __init__(self,  **kwargs,):
@@ -141,7 +159,7 @@ class PoseFilter(Processor):
             self.point_filters = list()
 
         elif self.mode == "kalman_filter":
-            pass
+            self.point_filters = list()
 
         else:
             raise NotImplementedError("No such filtering algorithm has been implemented for the PoseFilter.")
@@ -155,7 +173,7 @@ class PoseFilter(Processor):
     def process(self, pose, **kwargs):
         time = kwargs['frame_time']
 
-        if self.mode == "one_euro":
+        if self.mode == "low_pass":
             for k, bp in enumerate(pose):
                 try:
                     x_filter, y_filter = self.point_filters[k]
@@ -172,6 +190,15 @@ class PoseFilter(Processor):
                 # We hit this if there's no initialized filter.
                 except IndexError:
                     self.point_filters.append(MovingAverageFilter(time, bp, pcutoff=self.pcutoff, maximum_distance=self.maximum_distance, memory_length=self.maximum_distance))
+                    
+        elif self.mode == "kalman_filter":
+            for k, bp in enumerate(pose):
+                try:
+                    pfilter = self.point_filters[k]
+                    pose[k][0], pose[k][1], pose[k][2]  = pfilter(time, bp)
+                # We hit this if there's no initialized filter.
+                except (IndexError, TypeError):
+                    self.point_filters.append(PoseKalmanFilter(time, bp))
 
         
         return pose
