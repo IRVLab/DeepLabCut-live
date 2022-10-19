@@ -77,7 +77,7 @@ class MovingAverageFilter:
     def __call__(self, time, pose):
         x,y,conf = pose
 
-        # If we believe the estimate
+        # If we believe the estimate~np.all(self.memory == 0, axis=
         if self.pose_acceptable(pose):
             # First, update the memory. We're storing, but not using time. In the future we could use time distance as another 
             self.memory[:-1] = self.memory[1:]
@@ -99,7 +99,7 @@ class MovingAverageFilter:
             relevent_memory = self.memory[~np.all(self.memory == 0, axis=1), 1:]
             # We calculate weights by inverse time distance, scaled by confidence.
             weights = abs((relevent_memory[:,0] - time)/max(relevent_memory[:,0]) - 1) * relevent_memory[:,3]
-            x_mean, y_mean, conf_mean = np.mean(relevent_memory, axis=0, weights= weights)
+            x_mean, y_mean, conf_mean = np.mean(relevent_memory, axis=0)
 
             # print("Calculated mean: {}".format([x_mean, y_mean, conf_mean]))
             # Return the average of the memory.
@@ -146,6 +146,8 @@ class PoseFilter(Processor):
     def __init__(self,  **kwargs,):
         super().__init__(**kwargs)
         self.mode = kwargs['filter_type']
+        self.filter_outliers = kwargs['filter_outliers']
+        self.zscore_thresh = kwargs['max_zscore']
 
         if self.mode == "low_pass":
             self.min_cutoff = kwargs['minimum_cutoff']
@@ -166,9 +168,11 @@ class PoseFilter(Processor):
     
     def reset(self):
         if self.mode == "low_pass":
-            self.__init__(filter_type=self.mode, minimum_cutoff=self.min_cutoff, beta=self.beta)
+            self.__init__(filter_type=self.mode, minimum_cutoff=self.min_cutoff, beta=self.beta, filter_outliers=self.filter_outliers, max_zscore=self.zscore_thresh)
         elif self.mode == "moving_average":
-            self.__init__(filter_type=self.mode, pcutoff=self.pcutoff, maximum_distance=self.maximum_distance, memory_length=self.memory_length)
+            self.__init__(filter_type=self.mode, pcutoff=self.pcutoff, maximum_distance=self.maximum_distance, memory_length=self.memory_length, filter_outliers=self.filter_outliers, max_zscore=self.zscore_thresh)
+        elif self.mode == "kalman_filter":
+            self.__init__(filter_type=self.mode, filter_outliers=self.filter_outliers, max_zscore=self.zscore_thresh)
 
     def process(self, pose, **kwargs):
         time = kwargs['frame_time']
@@ -200,5 +204,12 @@ class PoseFilter(Processor):
                 except (IndexError, TypeError):
                     self.point_filters.append(PoseKalmanFilter(time, bp))
 
-        
+        if self.filter_outliers:
+            mean = np.mean(pose[:,0:2], axis=0)
+            std = np.std(pose[:,0:2], axis=0)
+            zscores = np.abs((pose[:,0:2] - mean)/std)
+            zscores = np.mean(zscores, 1)
+
+            pose[np.where(zscores >= self.zscore_thresh), :] = [-1, -1, 0.0]
+
         return pose
