@@ -181,8 +181,8 @@ class PoseFilter(Processor):
             for k, bp in enumerate(pose):
                 try:
                     x_filter, y_filter = self.point_filters[k]
-                    pose[k][0] = x_filter(time, bp[0])
-                    pose[k][1] = y_filter(time, bp[1])
+                    pose[k][0] = x_filter(time, bp[0], bp[2])
+                    pose[k][1] = y_filter(time, bp[1], bp[2])
                 # We hit this if there's no initialized filter.
                 except IndexError:
                     self.point_filters.append((OneEuroFilter(time, bp[0], self.min_cutoff, self.beta), OneEuroFilter(time, bp[1], self.min_cutoff, self.beta)))
